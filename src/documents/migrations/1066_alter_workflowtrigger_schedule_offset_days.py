@@ -4,6 +4,13 @@ from django.db import migrations
 from django.db import models
 
 
+def invert_existing_offset_values(apps, schema_editor):
+    WorkflowTrigger = apps.get_model("documents", "WorkflowTrigger")
+    WorkflowTrigger.objects.filter(
+        type=4,
+    ).update(schedule_offset_days=models.F("schedule_offset_days") * -1)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("documents", "1065_workflowaction_assign_custom_fields_values"),
@@ -18,5 +25,9 @@ class Migration(migrations.Migration):
                 help_text="The number of days to offset the schedule trigger by.",
                 verbose_name="schedule offset days",
             ),
+        ),
+        migrations.RunPython(
+            code=invert_existing_offset_values,
+            reverse_code=migrations.RunPython.noop,
         ),
     ]
