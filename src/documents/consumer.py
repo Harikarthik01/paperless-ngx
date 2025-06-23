@@ -467,6 +467,8 @@ class ConsumerPlugin(
         )
         # now that everything is done, we can start to store the document
         # in the system. This will be a transaction and reasonably fast.
+        success = False
+        result = None
         try:
             with transaction.atomic():
                 # store the document.
@@ -531,7 +533,22 @@ class ConsumerPlugin(
                 # renaming logic to acquire the lock as well.
                 # This triggers things like file renaming
                 document.save()
+                success = True
 
+        except Exception as e:
+            # save the exception for later
+            try:
+                self._fail(
+                    str(e),
+                    f"The following error occurred while storing document "
+                    f"{self.filename} after parsing: {e}",
+                    exc_info=True,
+                    exception=e,
+                )
+            except Exception as fail_exc:
+                stored_exception = fail_exc
+        finally:
+            if success:
                 # Delete the file only if it was successfully consumed
                 self.log.debug(f"Deleting file {self.working_copy}")
                 self.input_doc.original_file.unlink()
@@ -549,34 +566,33 @@ class ConsumerPlugin(
                     self.log.debug(f"Deleting file {shadow_file}")
                     Path(shadow_file).unlink()
 
-        except Exception as e:
-            self._fail(
-                str(e),
-                f"The following error occurred while storing document "
-                f"{self.filename} after parsing: {e}",
-                exc_info=True,
-                exception=e,
-            )
-        finally:
+                self.run_post_consume_script(document)
+
+                self.log.info(f"Document {document} consumption finished")
+
+                self._send_progress(
+                    100,
+                    100,
+                    ProgressStatusOptions.SUCCESS,
+                    ConsumerStatusShortMessage.FINISHED,
+                    document.id,
+                )
+
+                # Return the most up to date fields
+                document.refresh_from_db()
+
+                result = f"Success. New document id {document.pk} created"
+            elif stored_exception:
+                raise stored_exception
+            else:
+                self._fail(
+                    ConsumerStatusShortMessage.FAILED,
+                    f"Error occurred while saving {self.filename}.",
+                )
+
             document_parser.cleanup()
             tempdir.cleanup()
-
-        self.run_post_consume_script(document)
-
-        self.log.info(f"Document {document} consumption finished")
-
-        self._send_progress(
-            100,
-            100,
-            ProgressStatusOptions.SUCCESS,
-            ConsumerStatusShortMessage.FINISHED,
-            document.id,
-        )
-
-        # Return the most up to date fields
-        document.refresh_from_db()
-
-        return f"Success. New document id {document.pk} created"
+            return result
 
     def _parse_title_placeholders(self, title: str) -> str:
         local_added = timezone.localtime(timezone.now())

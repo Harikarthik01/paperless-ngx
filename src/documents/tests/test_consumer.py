@@ -633,6 +633,25 @@ class TestConsumer(
         # Database empty
         self.assertEqual(Document.objects.all().count(), 0)
 
+    @mock.patch("documents.consumer.ConsumerPlugin._store")
+    @mock.patch("documents.consumer.document_consumption_finished.send")
+    @mock.patch("documents.consumer.generate_unique_filename")
+    def testSaveFailsStillCaught(self, m_filename, m_signal, m_store):
+        filename = self.get_test_file()
+        m_store.return_value = None
+        m_filename.side_effect = AttributeError("BOOM")
+
+        with self.get_consumer(filename) as consumer:
+            with self.assertRaisesMessage(
+                ConsumerError,
+                "sample.pdf: The following error occurred while storing document sample.pdf after parsing: BOOM",
+            ):
+                consumer.run()
+
+        self._assert_first_last_send_progress(last_status="FAILED")
+        self.assertIsFile(filename)
+        self.assertEqual(Document.objects.count(), 0)
+
     @override_settings(FILENAME_FORMAT="{correspondent}/{title}")
     def testFilenameHandling(self):
         with self.get_consumer(
