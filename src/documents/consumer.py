@@ -468,7 +468,6 @@ class ConsumerPlugin(
         # now that everything is done, we can start to store the document
         # in the system. This will be a transaction and reasonably fast.
         success = False
-        result = None
         store_exception = None
         try:
             with transaction.atomic():
@@ -572,24 +571,25 @@ class ConsumerPlugin(
                 # Return the most up to date fields
                 document.refresh_from_db()
 
-                result = f"Success. New document id {document.pk} created"
-            elif store_exception:
-                self._fail(
-                    str(store_exception),
-                    f"The following error occurred while storing document "
-                    f"{self.filename} after parsing: {store_exception}",
-                    exc_info=True,
-                    exception=store_exception,
-                )
+                document_parser.cleanup()
+                tempdir.cleanup()
+                return f"Success. New document id {document.pk} created"
             else:
-                self._fail(
-                    ConsumerStatusShortMessage.FAILED,
-                    f"Error occurred while saving {self.filename}.",
-                )
-
-            document_parser.cleanup()
-            tempdir.cleanup()
-            return result
+                document_parser.cleanup()
+                tempdir.cleanup()
+                if store_exception:
+                    self._fail(
+                        str(store_exception),
+                        f"The following error occurred while storing document "
+                        f"{self.filename} after parsing: {store_exception}",
+                        exc_info=True,
+                        exception=store_exception,
+                    )
+                else:
+                    self._fail(
+                        ConsumerStatusShortMessage.FAILED,
+                        f"Error occurred while saving {self.filename}.",
+                    )
 
     def _parse_title_placeholders(self, title: str) -> str:
         local_added = timezone.localtime(timezone.now())
