@@ -145,7 +145,7 @@ class ConsumerPluginMixin:
     ):
         self._send_progress(100, 100, ProgressStatusOptions.FAILED, message)
         self.log.error(log_message or message, exc_info=exc_info)
-        raise ConsumerError(f"{self.filename}: {log_message or message}")
+        raise ConsumerError(f"{self.filename}: {log_message or message}") from exception
 
 
 class ConsumerPlugin(
@@ -535,18 +535,8 @@ class ConsumerPlugin(
                 document.save()
                 success = True
 
-        except Exception as e:
-            # save the exception for later
-            try:
-                self._fail(
-                    str(e),
-                    f"The following error occurred while storing document "
-                    f"{self.filename} after parsing: {e}",
-                    exc_info=True,
-                    exception=e,
-                )
-            except Exception as fail_exc:
-                stored_exception = fail_exc
+        except Exception as fail_exc:
+            store_exception = fail_exc
         finally:
             if success:
                 # Delete the file only if it was successfully consumed
@@ -582,8 +572,14 @@ class ConsumerPlugin(
                 document.refresh_from_db()
 
                 result = f"Success. New document id {document.pk} created"
-            elif stored_exception:
-                raise stored_exception
+            elif store_exception:
+                self._fail(
+                    str(store_exception),
+                    f"The following error occurred while storing document "
+                    f"{self.filename} after parsing: {store_exception}",
+                    exc_info=True,
+                    exception=store_exception,
+                )
             else:
                 self._fail(
                     ConsumerStatusShortMessage.FAILED,
