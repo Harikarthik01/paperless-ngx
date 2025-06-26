@@ -145,7 +145,7 @@ class ConsumerPluginMixin:
     ):
         self._send_progress(100, 100, ProgressStatusOptions.FAILED, message)
         self.log.error(log_message or message, exc_info=exc_info)
-        raise ConsumerError(f"{self.filename}: {log_message or message}") from exception
+        raise ConsumerError(f"{self.filename}: {log_message or message}")
 
 
 class ConsumerPlugin(
