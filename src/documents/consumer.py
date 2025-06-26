@@ -469,6 +469,7 @@ class ConsumerPlugin(
         # in the system. This will be a transaction and reasonably fast.
         success = False
         result = None
+        store_exception = None
         try:
             with transaction.atomic():
                 # store the document.
